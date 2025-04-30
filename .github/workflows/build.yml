@@ -1,0 +1,101 @@
+name: "Build on Dispatch"
+run-name: "Build for ${{ github.event.inputs.suite }} ${{ github.event.inputs.flavor }} by @${{ github.actor }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Suite name"
+        required: true
+        type: choice
+        default: "noble"
+        options:
+        - "jammy"
+        - "noble"
+
+env:
+  RECIPE_REPO: "diverger/ubuntu-rockchip"
+  RECIPE_PATH: "."
+  KERNEL_PATH: "./build/kernel"
+
+jobs:
+  build:
+    if: ${{ github.repository_owner == 'diverger'}}
+    runs-on: ubuntu-latest
+    name: Build kernel
+
+    steps:
+      - name: Get more disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      - name: Checkout private repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.RECIPE_REPO }}
+          token: ${{ secrets.REPO_ACCESS_TOKEN }}
+          path: ${{ env.RECIPE_PATH }}
+          clean: false
+          fetch-depth: 1
+          lfs: true
+
+      # - name: List files in workspace root
+      #   shell: bash
+      #   run: ls -la ${{ env.RECIPE_PATH }}
+
+      - name: Set artifact variables
+        id: vars
+        run: |
+          suite_ver=${{ github.event.inputs.suite == 'jammy' && '5.10' || github.event.inputs.suite == 'noble' && '6.1' }}
+          artifact_name="linux-rockchip-${suite_ver}"
+          artifact_path="${{ env.KERNEL_PATH }}/linux-*.deb"
+          echo "artifact_name=${artifact_name}" >> $GITHUB_OUTPUT
+          echo "artifact_path=${artifact_path}" >> $GITHUB_OUTPUT
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          sudo apt-get update && apt-get purge needrestart -y && sudo apt-get upgrade -y
+          sudo apt-get install -y build-essential gcc-aarch64-linux-gnu bison \
+          qemu-user-static qemu-system-arm qemu-efi-aarch64 u-boot-tools binfmt-support \
+          debootstrap flex libssl-dev bc rsync kmod cpio xz-utils fakeroot parted \
+          udev dosfstools uuid-runtime git-lfs device-tree-compiler python3 \
+          python-is-python3 fdisk bc debhelper python3-pyelftools python3-setuptools \
+          python3-pkg-resources swig libfdt-dev libpython3-dev gawk
+
+      - name: Hash Source Files
+        id: hash
+        shell: bash
+        run: |
+          # Include all files/dirs in *this* repo that affect the build output
+          echo "files_hash=$(find ${{ env.RECIPE_PATH }}/scripts/build-kernel.sh ${{ env.RECIPE_PATH }}/build.sh ${{ env.RECIPE_PATH }}/config -type f -print0 | sort -z | xargs -0 sha1sum | sha1sum | awk '{ print $1 }')" >> $GITHUB_OUTPUT
+
+      - name: Cache artifact
+        id: cache-artifact
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.KERNEL_PATH }}
+          # ---- UPDATED KEY ----
+          # Include OS, suite, flavor, local files hash, AND external repo commit hash
+          key: ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}-
+          # restore-keys: |
+          #   ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}-
+          #   ${{ runner.os }}-${{ github.event.inputs.suite }}-
+
+      - name: Build
+        if: steps.cache-artifact.outputs.cache-hit != 'true'
+        shell: bash
+        run: sudo ${{ env.RECIPE_PATH }}/build.sh --suite=${{ github.event.inputs.suite }} --kernel-only
+
+      - name: Upload
+        uses: actions/upload-artifact@v4.3.3
+        with:
+            name: ${{ steps.vars.outputs.artifact_name }}
+            path: ${{ steps.vars.outputs.artifact_path }}
+            if-no-files-found: error
