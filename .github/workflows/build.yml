@@ -91,6 +91,8 @@ jobs:
       - name: Build
         if: steps.cache-artifact.outputs.cache-hit != 'true'
         shell: bash
+        env:
+          REPO_ACCESS_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN }}
         run: sudo ${{ env.RECIPE_PATH }}/build.sh --suite=${{ github.event.inputs.suite }} --kernel-only
 
       - name: Upload
