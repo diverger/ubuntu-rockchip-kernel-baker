@@ -58,7 +58,7 @@ jobs:
           echo "artifact_name=${artifact_name}" >> $GITHUB_OUTPUT
           echo "artifact_path=${artifact_path}" >> $GITHUB_OUTPUT
 
-      - name: Hash Source Files
+      - name: Hash source files
         id: hash
         shell: bash
         run: |
