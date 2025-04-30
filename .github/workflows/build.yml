@@ -12,6 +12,11 @@ on:
         options:
         - "jammy"
         - "noble"
+      trigger_source:
+        description: "Source of the trigger (e.g., manual, workflow)"
+        required: false
+        type: string
+        default: "manual"
 
 env:
   RECIPE_REPO: "diverger/ubuntu-rockchip"
