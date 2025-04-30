@@ -65,6 +65,9 @@ jobs:
           # Include all files/dirs in *this* repo that affect the build output
           echo "files_hash=$(find ${{ env.RECIPE_PATH }}/scripts/build-kernel.sh ${{ env.RECIPE_PATH }}/build.sh ${{ env.RECIPE_PATH }}/config -type f -print0 | sort -z | xargs -0 sha1sum | sha1sum | awk '{ print $1 }')" >> $GITHUB_OUTPUT
 
+      - name: Show source files hash
+        run: echo "Calculated files_hash is ${{ steps.hash.outputs.files_hash }}"
+
       - name: Cache artifact
         id: cache-artifact
         uses: actions/cache@v4
@@ -74,7 +77,6 @@ jobs:
           # Include OS, suite, flavor, local files hash, AND external repo commit hash
           key: ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}-
           # restore-keys: |
-          #   ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}-
           #   ${{ runner.os }}-${{ github.event.inputs.suite }}-
 
       - name: Install dependencies
@@ -95,6 +97,11 @@ jobs:
         env:
           REPO_ACCESS_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN }}
         run: sudo -E ${{ env.RECIPE_PATH }}/build.sh --suite=${{ github.event.inputs.suite }} --kernel-only
+
+      - name: Fix permissions for cache/upload
+        if: steps.cache-artifact.outputs.cache-hit != 'true' # Only run if build happened
+        shell: bash
+        run: sudo chown -R runner:runner ${{ env.KERNEL_PATH }}
 
       - name: Upload
         uses: actions/upload-artifact@v4.3.3
