@@ -1,5 +1,5 @@
 name: "Build on dispatch"
-run-name: "Build for ${{ github.event.inputs.suite }} by @${{ github.actor }}"
+run-name: "Build for ${{ github.event.inputs.Suite }} by @${{ github.actor }} (Trigger: ${{ github.event.inputs.trigger_source }})"
 
 on:
   workflow_dispatch:
@@ -25,6 +25,18 @@ jobs:
     name: Build kernel
 
     steps:
+      - name: Show Trigger Source
+        run: |
+          echo "Workflow triggered by: ${{ github.event.inputs.trigger_source }}"
+
+        # - name: Manual Trigger Step
+        #   if: github.event.inputs.trigger_source == 'manual'
+        #   run: echo "This step runs only for manual triggers."
+
+        # - name: Workflow Trigger Step
+        #   if: github.event.inputs.trigger_source == 'workflow'
+        #   run: echo "This step runs only when triggered by another workflow."
+
       - name: Get more disk space
         uses: jlumbroso/free-disk-space@main
         with:
