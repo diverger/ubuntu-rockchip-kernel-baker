@@ -58,17 +58,6 @@ jobs:
           echo "artifact_name=${artifact_name}" >> $GITHUB_OUTPUT
           echo "artifact_path=${artifact_path}" >> $GITHUB_OUTPUT
 
-      - name: Install dependencies
-        shell: bash
-        run: |
-          sudo apt-get update && apt-get purge needrestart -y && sudo apt-get upgrade -y
-          sudo apt-get install -y build-essential gcc-aarch64-linux-gnu bison \
-          qemu-user-static qemu-system-arm qemu-efi-aarch64 u-boot-tools binfmt-support \
-          debootstrap flex libssl-dev bc rsync kmod cpio xz-utils fakeroot parted \
-          udev dosfstools uuid-runtime git-lfs device-tree-compiler python3 \
-          python-is-python3 fdisk bc debhelper python3-pyelftools python3-setuptools \
-          python3-pkg-resources swig libfdt-dev libpython3-dev gawk
-
       - name: Hash Source Files
         id: hash
         shell: bash
@@ -87,6 +76,18 @@ jobs:
           # restore-keys: |
           #   ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}-
           #   ${{ runner.os }}-${{ github.event.inputs.suite }}-
+
+      - name: Install dependencies
+        if: steps.cache-artifact.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          sudo apt-get update && apt-get purge needrestart -y && sudo apt-get upgrade -y
+          sudo apt-get install -y build-essential gcc-aarch64-linux-gnu bison \
+          qemu-user-static qemu-system-arm qemu-efi-aarch64 u-boot-tools binfmt-support \
+          debootstrap flex libssl-dev bc rsync kmod cpio xz-utils fakeroot parted \
+          udev dosfstools uuid-runtime git-lfs device-tree-compiler python3 \
+          python-is-python3 fdisk bc debhelper python3-pyelftools python3-setuptools \
+          python3-pkg-resources swig libfdt-dev libpython3-dev gawk
 
       - name: Build
         if: steps.cache-artifact.outputs.cache-hit != 'true'
