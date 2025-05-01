@@ -62,9 +62,11 @@ jobs:
           fetch-depth: 1
           lfs: true
 
-      # - name: List files in workspace root
-      #   shell: bash
-      #   run: ls -la ${{ env.RECIPE_PATH }}
+      - name: Install zstd # New step
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zstd
 
       - name: Set artifact variables
         id: vars
@@ -85,19 +87,30 @@ jobs:
       - name: Show source files hash
         run: echo "Calculated files_hash is ${{ steps.hash.outputs.files_hash }}"
 
-      - name: Cache artifact
-        id: cache-artifact
+      - name: Cache Kernel Artifact Archive
+        id: cache-kernel-archive # Renamed ID for clarity
         uses: actions/cache@v4
         with:
-          path: ${{ env.KERNEL_PATH }}
-          # ---- UPDATED KEY ----
-          # Include OS, suite, flavor, local files hash, AND external repo commit hash
-          key: ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}-
-          # restore-keys: |
-          #   ${{ runner.os }}-${{ github.event.inputs.suite }}-
+          # Path to the compressed archive file
+          path: kernel_artifacts.tar.zst
+          # Key includes suite and file hash, plus '-archive' suffix
+          key: ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}-archive
+
+      - name: Decompress Cached Artifacts
+        # Run only if the cache was hit
+        if: steps.cache-kernel-archive.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          echo "Cache hit. Decompressing artifacts..."
+          # Ensure the target directory exists (it might not if build steps are skipped)
+          mkdir -p ${{ env.KERNEL_PATH }}
+          # Decompress the archive into the workspace root. Tar paths should be relative.
+          tar -I zstd -xf kernel_artifacts.tar.zst -C ${{ github.workspace }}
+          echo "Decompression complete."
 
       - name: Install dependencies
-        if: steps.cache-artifact.outputs.cache-hit != 'true'
+        # Run only if the cache was missed
+        if: steps.cache-kernel-archive.outputs.cache-hit != 'true'
         shell: bash
         run: |
           sudo apt-get update && apt-get purge needrestart -y && sudo apt-get upgrade -y
@@ -109,29 +122,42 @@ jobs:
           python3-pkg-resources swig libfdt-dev libpython3-dev gawk
 
       - name: Build
-        if: steps.cache-artifact.outputs.cache-hit != 'true'
+        # Run only if the cache was missed
+        if: steps.cache-kernel-archive.outputs.cache-hit != 'true'
         shell: bash
         env:
           REPO_ACCESS_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN }}
         run: sudo -E ${{ env.RECIPE_PATH }}/build.sh --suite=${{ github.event.inputs.suite }} --kernel-only
 
-      - name: Fix permissions for cache/upload
-        if: steps.cache-artifact.outputs.cache-hit != 'true' # Only run if build happened
+      - name: Fix Build Output Permissions
+        # Run only if the cache was missed (and build happened)
+        if: steps.cache-kernel-archive.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          artifact_file="${{ steps.vars.outputs.artifact_path }}"
-          echo "Attempting to fix ownership for ${artifact_file}"
-          if [ -f "${artifact_file}" ]; then
-            # Change ownership of the specific artifact file
-            sudo chown runner:runner "${artifact_file}" || echo "chown failed but continuing"
-            echo "Ownership fix attempt finished for ${artifact_file}."
-          else
-            echo "Artifact file ${artifact_file} not found, skipping ownership fix."
-          fi
+          echo "Fixing permissions in ${{ env.KERNEL_PATH }}"
+          # Fix ownership for the whole kernel build dir before compression/upload
+          sudo chown -R runner:runner ${{ env.KERNEL_PATH }}
+          echo "Permissions fixed."
 
-      - name: Upload
+      - name: Compress Artifacts for Cache
+        # Run only if the cache was missed (after build and permission fix)
+        if: steps.cache-kernel-archive.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          echo "Cache miss. Compressing artifacts..."
+          # Go to the parent directory of KERNEL_PATH to archive relative paths
+          parent_dir=$(dirname "${{ env.KERNEL_PATH }}")
+          kernel_dir_name=$(basename "${{ env.KERNEL_PATH }}")
+          echo "Archiving .deb files from $parent_dir/$kernel_dir_name"
+          # Find .deb files within the kernel dir and create the archive at the workspace root using zstd
+          (cd "$parent_dir" && find "$kernel_dir_name" -name 'linux-*.deb' -print0 | tar --null --files-from - -I zstd -cf "${{ github.workspace }}/kernel_artifacts.tar.zst")
+          echo "Compression complete: ${{ github.workspace }}/kernel_artifacts.tar.zst"
+
+      - name: Upload Build Artifacts
+        # This step runs regardless of cache hit/miss
+        # It uploads the .deb files which are either freshly built or restored from cache
         uses: actions/upload-artifact@v4.3.3
         with:
             name: ${{ steps.vars.outputs.artifact_name }}
-            path: ${{ steps.vars.outputs.artifact_path }}
+            path: ${{ steps.vars.outputs.artifact_path }} # Use original wildcard path for upload
             if-no-files-found: error
