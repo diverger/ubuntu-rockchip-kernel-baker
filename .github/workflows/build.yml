@@ -21,7 +21,7 @@ on:
 env:
   RECIPE_REPO: "diverger/ubuntu-rockchip"
   RECIPE_PATH: "."
-  KERNEL_PATH: "./build/kernel"
+  KERNEL_PATH: "./build"
 
 jobs:
   build:
@@ -62,12 +62,6 @@ jobs:
           fetch-depth: 1
           lfs: true
 
-      - name: Install zstd # New step
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zstd
-
       - name: Set artifact variables
         id: vars
         run: |
@@ -87,30 +81,18 @@ jobs:
       - name: Show source files hash
         run: echo "Calculated files_hash is ${{ steps.hash.outputs.files_hash }}"
 
-      - name: Cache kernel artifact archive
-        id: cache-kernel-archive
+      - name: Cache kernel artifacts
+        id: cache-kernel-artifacts
         uses: actions/cache@v4
         with:
-          # Path to the compressed archive file
-          path: kernel_artifacts.tar.zst
-          # Key includes suite and file hash, plus '-archive' suffix
-          key: ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}-archive
-
-      - name: Decompress cached artifacts
-        # Run only if the cache was hit
-        if: steps.cache-kernel-archive.outputs.cache-hit == 'true'
-        shell: bash
-        run: |
-          echo "Cache hit. Decompressing artifacts..."
-          # Ensure the target directory exists (it might not if build steps are skipped)
-          mkdir -p ${{ env.KERNEL_PATH }}
-          # Decompress the archive into the workspace root. Tar paths should be relative.
-          tar -I zstd -xf kernel_artifacts.tar.zst -C ${{ github.workspace }}
-          echo "Decompression complete."
+          # Path uses the wildcard for .deb files directly
+          path: ${{ steps.vars.outputs.artifact_path }}
+          # Key includes suite and file hash
+          key: ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}
 
       - name: Install dependencies
         # Run only if the cache was missed
-        if: steps.cache-kernel-archive.outputs.cache-hit != 'true'
+        if: steps.cache-kernel-artifacts.outputs.cache-hit != 'true'
         shell: bash
         run: |
           # Update, remove needrestart, and install dependencies in one go
@@ -124,7 +106,7 @@ jobs:
 
       - name: Build
         # Run only if the cache was missed
-        if: steps.cache-kernel-archive.outputs.cache-hit != 'true'
+        if: steps.cache-kernel-artifacts.outputs.cache-hit != 'true'
         shell: bash
         env:
           REPO_ACCESS_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN }}
@@ -132,27 +114,13 @@ jobs:
 
       - name: Fix build output permissions
         # Run only if the cache was missed (and build happened)
-        if: steps.cache-kernel-archive.outputs.cache-hit != 'true'
+        if: steps.cache-kernel-artifacts.outputs.cache-hit != 'true'
         shell: bash
         run: |
           echo "Fixing permissions in ${{ env.KERNEL_PATH }}"
           # Fix ownership for the whole kernel build dir before compression/upload
           sudo chown -R runner:runner ${{ env.KERNEL_PATH }}
           echo "Permissions fixed."
-
-      - name: Compress artifacts for cache
-        # Run only if the cache was missed (after build and permission fix)
-        if: steps.cache-kernel-archive.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          echo "Cache miss. Compressing artifacts..."
-          # Go to the parent directory of KERNEL_PATH to archive relative paths
-          parent_dir=$(dirname "${{ env.KERNEL_PATH }}")
-          kernel_dir_name=$(basename "${{ env.KERNEL_PATH }}")
-          echo "Archiving .deb files from $parent_dir/$kernel_dir_name"
-          # Find .deb files within the kernel dir and create the archive at the workspace root using zstd
-          (cd "$parent_dir" && find "$kernel_dir_name" -name 'linux-*.deb' -print0 | tar --null --files-from - -I zstd -cf "${{ github.workspace }}/kernel_artifacts.tar.zst")
-          echo "Compression complete: ${{ github.workspace }}/kernel_artifacts.tar.zst"
 
       - name: Upload build artifacts
         # This step runs regardless of cache hit/miss
