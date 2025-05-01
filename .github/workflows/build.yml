@@ -113,13 +113,14 @@ jobs:
         if: steps.cache-kernel-archive.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          sudo apt-get update && apt-get purge needrestart -y && sudo apt-get upgrade -y
+          # Update, remove needrestart, and install dependencies in one go
+          sudo apt-get update && sudo apt-get purge needrestart -y && \
           sudo apt-get install -y build-essential gcc-aarch64-linux-gnu bison \
           qemu-user-static qemu-system-arm qemu-efi-aarch64 u-boot-tools binfmt-support \
           debootstrap flex libssl-dev bc rsync kmod cpio xz-utils fakeroot parted \
           udev dosfstools uuid-runtime git-lfs device-tree-compiler python3 \
           python-is-python3 fdisk bc debhelper python3-pyelftools python3-setuptools \
-          python3-pkg-resources swig libfdt-dev libpython3-dev gawk
+          python3-pkg-resources swig libfdt-dev libpython3-dev dctrl-tools gawk
 
       - name: Build
         # Run only if the cache was missed
