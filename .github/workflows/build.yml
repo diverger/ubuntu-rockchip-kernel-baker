@@ -17,6 +17,11 @@ on:
         required: false
         type: string
         default: "manual"
+      artifact_retention_days:
+        description: "Artifact retention period in days"
+        required: false
+        type: number
+        default: 1
 
 env:
   RECIPE_REPO: "diverger/ubuntu-rockchip"
@@ -130,3 +135,4 @@ jobs:
             name: ${{ steps.vars.outputs.artifact_name }}
             path: ${{ steps.vars.outputs.artifact_path }} # Use original wildcard path for upload
             if-no-files-found: error
+            retention-days: ${{ github.event.inputs.artifact_retention_days }}
