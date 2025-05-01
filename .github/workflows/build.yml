@@ -30,7 +30,7 @@ jobs:
     name: Build kernel
 
     steps:
-      - name: Show Trigger Source
+      - name: Show trigger source
         run: |
           echo "Workflow triggered by: ${{ github.event.inputs.trigger_source }}"
 
@@ -87,7 +87,7 @@ jobs:
       - name: Show source files hash
         run: echo "Calculated files_hash is ${{ steps.hash.outputs.files_hash }}"
 
-      - name: Cache Kernel Artifact Archive
+      - name: Cache kernel artifact archive
         id: cache-kernel-archive # Renamed ID for clarity
         uses: actions/cache@v4
         with:
@@ -96,7 +96,7 @@ jobs:
           # Key includes suite and file hash, plus '-archive' suffix
           key: ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}-archive
 
-      - name: Decompress Cached Artifacts
+      - name: Decompress cached artifacts
         # Run only if the cache was hit
         if: steps.cache-kernel-archive.outputs.cache-hit == 'true'
         shell: bash
@@ -129,7 +129,7 @@ jobs:
           REPO_ACCESS_TOKEN: ${{ secrets.REPO_ACCESS_TOKEN }}
         run: sudo -E ${{ env.RECIPE_PATH }}/build.sh --suite=${{ github.event.inputs.suite }} --kernel-only
 
-      - name: Fix Build Output Permissions
+      - name: Fix build output permissions
         # Run only if the cache was missed (and build happened)
         if: steps.cache-kernel-archive.outputs.cache-hit != 'true'
         shell: bash
@@ -139,7 +139,7 @@ jobs:
           sudo chown -R runner:runner ${{ env.KERNEL_PATH }}
           echo "Permissions fixed."
 
-      - name: Compress Artifacts for Cache
+      - name: Compress artifacts for cache
         # Run only if the cache was missed (after build and permission fix)
         if: steps.cache-kernel-archive.outputs.cache-hit != 'true'
         shell: bash
@@ -153,7 +153,7 @@ jobs:
           (cd "$parent_dir" && find "$kernel_dir_name" -name 'linux-*.deb' -print0 | tar --null --files-from - -I zstd -cf "${{ github.workspace }}/kernel_artifacts.tar.zst")
           echo "Compression complete: ${{ github.workspace }}/kernel_artifacts.tar.zst"
 
-      - name: Upload Build Artifacts
+      - name: Upload build artifacts
         # This step runs regardless of cache hit/miss
         # It uploads the .deb files which are either freshly built or restored from cache
         uses: actions/upload-artifact@v4.3.3
