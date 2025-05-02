@@ -93,7 +93,7 @@ jobs:
           # Path uses the wildcard for .deb files directly
           path: ${{ steps.vars.outputs.artifact_path }}
           # Key includes suite and file hash
-          key: ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}-  # Added trailing hyphen back
+          key: ${{ runner.os }}-${{ github.event.inputs.suite }}-${{ steps.hash.outputs.files_hash }}
 
       - name: Install dependencies
         # Run only if the cache was missed
