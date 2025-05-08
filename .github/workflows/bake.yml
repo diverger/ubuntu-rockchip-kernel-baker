@@ -46,6 +46,14 @@ jobs:
         #   if: github.event.inputs.trigger_source == 'workflow'
         #   run: echo "This step runs only when triggered by another workflow."
 
+      - name: Calculate expire date
+        id: expire
+        run: |
+          expire_date=$(date -u -d "+${{ github.event.inputs.artifact_retention_days }} days" +"%Y-%m-%d")
+          echo "Expire date: $expire_date"
+          echo "expire_date=$expire_date" >> $GITHUB_OUTPUT
+          echo "### Artifact Expire Date: $expire_date" >> $GITHUB_STEP_SUMMARY
+
       - name: Get more disk space
         uses: jlumbroso/free-disk-space@main
         with:
